@@ -9,10 +9,11 @@ import xlsxwriter
 
 #input
 loc = "//OMV2M/Publicmappe/bøker/Sci-Fi.and.Fantasy.Ebook.Collection"
-excelFileName = "Sci-Fi.and.Fantasy.Ebook.Collection"
+excelFileName = "test"
+excelFileLoc = loc[:loc.rfind("/")] #just a default, it will go in the folder of the folder of the books
 
 #excel-variables
-workbook = xlsxwriter.Workbook(loc[:loc.rfind("/")+1] + excelFileName +'.xlsx') #loc[:loc.rfind("/")] + excelFileName +'.xlsx')
+workbook = xlsxwriter.Workbook(excelFileLoc + "/" + excelFileName +'.xlsx') #loc[:loc.rfind("/")] + excelFileName +'.xlsx')
 worksheet = workbook.add_worksheet()
 
 row = 1
@@ -156,8 +157,8 @@ with os.scandir(loc) as entries:
 
 
 #create a xcel document
-
-worksheet.add_table('A1:E1000', {'data': books, "columns": [{'header':"Book"}, {'header':"Author(s)"}, {'header':"Format"}, {'header':"Rating"}, {'header':"Genre"}]})
+tableSize = 'A1:E'+ str(len(book)+1)
+worksheet.add_table(tableSize, {'data': books, "columns": [{'header':"Book"}, {'header':"Author(s)"}, {'header':"Format"}, {'header':"Rating"}, {'header':"Genre"}]})
 for i in range(0, len(books)): #makes the name a link to get more information
     worksheet.write_url(row, 0, books[i][5], string=books[i][0])
     row+=1
