@@ -8,9 +8,11 @@ import requests
 import xlsxwriter
 
 #input
-loc = "//OMV2M/Publicmappe/bøker/Sci-Fi.and.Fantasy.Ebook.Collection"
-excelFileName = "test"
-excelFileLoc = loc[:loc.rfind("/")] #just a default, it will go in the folder of the folder of the books
+loc = "//OMV2M/Publicmappe/bøker/Kindle Library 12-26-10/Library"
+excelFileName = "test"  #to update just use the same index as before and it'll just uptate the new stuff. Althougth it will wil not remove books if  they are removed
+
+excelFileLoc = loc[:loc.rfind("/")] #just a default, it will go in the folder of the folder of the excelFile and the index
+indexFileName = excelFileName + "-index"  #just a default
 
 #excel-variables
 workbook = xlsxwriter.Workbook(excelFileLoc + "/" + excelFileName +'.xlsx') #loc[:loc.rfind("/")] + excelFileName +'.xlsx')
@@ -22,6 +24,16 @@ col = 0
 
 books = []
 
+bannedFileTypes = {"jpg", "opf", "db", "tmp", "tmp-journal"}
+
+#for testing use False if there is no limit
+stopAfterNumOfBooks = False
+def createIndex():
+    #create an index so that if there is a need to update the file it does not have to update everything alla agiain
+
+    index = open(os.path.join(excelFileLoc, indexFileName + ".txt" ),"w+")
+    index.write(str(books))
+    index.close()
 
 def getWebpage(name):
     return(str(requests.get("https://www.goodreads.com/search?utf8=%E2%9C%93&q=" + name + "&search_type=books").content))
@@ -73,7 +85,15 @@ def findDigit(string):
             return(i)
         i+=1
     return(-1)
-
+def getAllFilesInDir(location):
+    f = []
+    allFiles = os.walk(loc, topdown=True)
+    for (root, dirs, files) in allFiles:
+        for file in files:
+            f.extend(file)
+            if len(f) > stopAfterNumOfBooks and stopAfterNumOfBooks != False: #this is for testing
+                return(f)
+    return(f)
 
 #methods for getting soting the file name to name and author
 
@@ -94,7 +114,7 @@ def authorName(header):
             series.replace(" 0", ", #")
         else:
             series = series[:findDigit(series)-1] +", "+"#"+ series[:findDigit(series)]
-        name = name + "(" + series + ")"
+        name = name + " (" + series + ")"
 
     name.replace(" -",":")
     return(name, author)
@@ -107,24 +127,27 @@ def freshUpNameAuthor(name, author):
     return(name, author)
 
 
+def getInfo(header):
+    sortingMethods = [nameAuthor, authorName] #this is the differnet methods for getting the name and author so if one fails it's posseble to use a redundant method
 
-def getInfo(header, lastMethod):
-    sortingMethods = [nameAuthor, authorName] #this is the differnet methods for getting the name and author so if one fails it's posseble to use a redundan method
+    defaultMethod = 1
+
+    fullEntry = header
 
     format = header[header.rfind(".")+1:]
     header = header[:header.rfind(".")]
     rating = ""
 
     i = 0
-    while rating.find(".") == -1 and i < len(sortingMethods): #making sure that its not empty.
+    while rating.find(".") == -1 and i < len(sortingMethods):
         i+=1
-        temp = sortingMethods[lastMethod](header)
+        temp = sortingMethods[defaultMethod](header)
 
         name = temp[0]
         author = temp[1]
 
         #this uses the website goodreads to get the data
-        page = getWebpage(name + "-" + author)
+        page = getWebpage(name + " by " + author)
 
         rating = getRating(page)
         genre = getGenre(page)
@@ -132,35 +155,47 @@ def getInfo(header, lastMethod):
 
         #its nessecary to have a new method for choosing the method, because this only supports two...
         if rating.find(".") == -1: #choosing the next method
-            if lastMethod == 1:
-                lastMethod = 0
+            if defaultMethod == 1:
+                defaultMethod = 0
             else:
-                lastMethod = 1
+                defaultMethod = 1
     if getName(page) != "":
         name = getName(page)
         author = getAuthor(page)
-    return(name, author, format, rating, genre, link)
-
-with os.scandir(loc) as entries:
-    lastMethod = 0
-    i = 0 #for testing
-    for entry in entries:
-        book = getInfo(entry.name, lastMethod)
-        books.append(book)
+    print(defaultMethod)
+    return(name, author, format, rating, genre, fullEntry, link)
 
 
-        #for testing
-        i+= 1
-        if i > 100:
-            pass
-            #break
+#this part of the program gets the indexFile
+filesInLastBooks = []
+pathIndex = excelFileLoc + "/" + indexFileName + ".txt"
+if os.path.isfile(pathIndex) and open(pathIndex, "r").read() != "":
+    lastBooks = eval(open(pathIndex, "r").read()) #gets the index file
+    for i in range(0,len(lastBooks)):
+        filesInLastBooks.append(lastBooks[i][5])
 
-
+i = 0
+for file in getAllFilesInDir(loc):
+    if (file[file.rfind(".")+1:] in bannedFileTypes) == False:
+        if file in filesInLastBooks:
+            books.append(lastBooks[filesInLastBooks.index(file)])
+        else:
+            book = getInfo(file)
+            books.append(book)
+        if i > 25: #create a backup in the index, so the program can be stopped and resumed and not have to start over
+            createIndex()
+            i = 0
+        else:
+            i += 1
 #create a xcel document
-tableSize = 'A1:E'+ str(len(book)+1)
-worksheet.add_table(tableSize, {'data': books, "columns": [{'header':"Book"}, {'header':"Author(s)"}, {'header':"Format"}, {'header':"Rating"}, {'header':"Genre"}]})
+tableSize = 'A1:F'+ str(len(books)+1)
+worksheet.add_table(tableSize, {'data': books, "columns": [{'header':"Book"}, {'header':"Author(s)"}, {'header':"Format"}, {'header':"Rating"}, {'header':"Genre"}, {'header':"fullFileName"}]})
 for i in range(0, len(books)): #makes the name a link to get more information
-    worksheet.write_url(row, 0, books[i][5], string=books[i][0])
+    worksheet.write_url(row, 0, books[i][6], string=books[i][0])
     row+=1
     pass
 workbook.close()
+
+#create an index so that if there is a need to update the file it does not have to update everything alla agiain
+
+createIndex()
