@@ -8,7 +8,7 @@ import requests
 import xlsxwriter
 
 #input
-loc = "//OMV2M/Publicmappe/bøker/Kindle Library 12-26-10/Library"
+loc = "//OMV2M\Publicmappe/bøker/Kindle Library 12-26-10/Library"
 excelFileName = "test"  #to update just use the same index as before and it'll just uptate the new stuff. Althougth it will wil not remove books if  they are removed
 
 excelFileLoc = loc[:loc.rfind("/")] #just a default, it will go in the folder of the folder of the excelFile and the index
@@ -24,10 +24,11 @@ col = 0
 
 books = []
 
+#things that need updating, if the program is changed
 bannedFileTypes = {"jpg", "opf", "db", "tmp", "tmp-journal"}
 
 #for testing use False if there is no limit
-stopAfterNumOfBooks = False
+stopAfterNumOfBooks = 30
 def createIndex():
     #create an index so that if there is a need to update the file it does not have to update everything alla agiain
 
@@ -72,6 +73,10 @@ def getName(page):
     page = page[:page.find("<")]
     return(page)
 
+def deleteFirst(page):
+    return page[page.find(getLink(page)):]
+
+
 
 def containdigit(string):
     for character in string:
@@ -90,21 +95,49 @@ def getAllFilesInDir(location):
     allFiles = os.walk(loc, topdown=True)
     for (root, dirs, files) in allFiles:
         for file in files:
-            f.extend(file)
-            if len(f) > stopAfterNumOfBooks and stopAfterNumOfBooks != False: #this is for testing
-                return(f)
+            if (file[file.rfind(".")+1:] in bannedFileTypes) == False:
+                f.append(file)
+                if len(f) > stopAfterNumOfBooks and stopAfterNumOfBooks != False: #this is for testing
+                    return(f)
     return(f)
+
+
+def sumList(list):
+    tot = 0
+    for i in range(0,len(list)):
+        tot += list[i]
+    return tot
+def numOfChar(str, letters=[]):  #returns  the differnet letters used and how many times they where used
+    charsInStr = [0 for i in range(0,len(letters))]
+    for character in str:
+        if (character in letters) == False:
+            letters.append(character)
+            charsInStr.append(1)
+        else:
+            charsInStr[letters.index(character)] += 1
+    return letters, charsInStr
+def howSimilarLetters(str,compareTo): #returns the percent of lertters that are the same
+    charsInStr = numOfChar(str)
+    charsInComp = numOfChar(compareTo, charsInStr[0])
+    chars = charsInComp[0]
+
+    oneCharVal = 200/(sumList(charsInComp[1]) + sumList(charsInStr[1]))
+    sameChars = 0
+    for i in range(0,min([len(charsInStr[1]),len(charsInComp[1])])):
+        sameChars += min([charsInStr[1][i],charsInComp[1][i]])
+    return oneCharVal * sameChars
+
 
 #methods for getting soting the file name to name and author
 
 def nameAuthor(header):
-    name = header[:header.rfind("-")-1]
-    author = header[header.rfind("-")+2:]
-    return(name, author)
+    name = header[:header.rfind(" - ")]
+    author = header[header.rfind(" - ")+3:]
+    return name, author
 
 def authorName(header):
-    author = header[:header.find("-")]
-    book = header[header.rfind("-")+2:]
+    author = header[:header.find(" - ")]
+    book = header[header.rfind(" - ")+3:]
     series = header[header.find("-"):]
     series = series[:series.find("-")]
 
@@ -117,22 +150,22 @@ def authorName(header):
         name = name + " (" + series + ")"
 
     name.replace(" -",":")
-    return(name, author)
+    return name, author
 
 
 
 def freshUpNameAuthor(name, author):
     name = name.replace(", the", "").replace("_",":")
     author = author.replace(";", ",")
-    return(name, author)
+    return name, author
 
 
 def getInfo(header):
-    sortingMethods = [nameAuthor, authorName] #this is the differnet methods for getting the name and author so if one fails it's posseble to use a redundant method
 
-    defaultMethod = 1
+    defaultMethod = 0
 
     fullEntry = header
+    header = header.replace("_ a novel", "")
 
     format = header[header.rfind(".")+1:]
     header = header[:header.rfind(".")]
@@ -147,14 +180,26 @@ def getInfo(header):
         author = temp[1]
 
         #this uses the website goodreads to get the data
-        page = getWebpage(name + " by " + author)
+        page = getWebpage(name)
 
+        if howSimilarLetters(getAuthor(page), author) < 60:
+            print("This book is probably wrong: ", name," --> ", author, " vs ", getAuthor(page))
+            if howSimilarLetters(getAuthor(page), name) > 60:  #this will never come true (almost), so could be moved
+                name = temp[1]
+                author = temp[0]
+                page = getWebpage(name)
+                print("name and author is swiched: ", name, author)
+            else: #here i should try to remove
+                print("Move througth the different books (use )", )
+                pass
+        else:
+            print("Probably right book: ", name, " --> ", author, " vs ", getAuthor(page))
         rating = getRating(page)
         genre = getGenre(page)
         link = getLink(page)
 
         #its nessecary to have a new method for choosing the method, because this only supports two...
-        if rating.find(".") == -1: #choosing the next method
+        if rating.find(".") == -1: #choosing the next method... in a very bad way...
             if defaultMethod == 1:
                 defaultMethod = 0
             else:
@@ -162,8 +207,7 @@ def getInfo(header):
     if getName(page) != "":
         name = getName(page)
         author = getAuthor(page)
-    print(defaultMethod)
-    return(name, author, format, rating, genre, fullEntry, link)
+    return name, author, format, rating, genre, fullEntry, link
 
 
 #this part of the program gets the indexFile
@@ -174,19 +218,26 @@ if os.path.isfile(pathIndex) and open(pathIndex, "r").read() != "":
     for i in range(0,len(lastBooks)):
         filesInLastBooks.append(lastBooks[i][5])
 
+sortingMethods = [nameAuthor, authorName] #this is the differnet methods for getting the name and author so if one fails it's posseble to use a redundant method
 i = 0
 for file in getAllFilesInDir(loc):
-    if (file[file.rfind(".")+1:] in bannedFileTypes) == False:
-        if file in filesInLastBooks:
-            books.append(lastBooks[filesInLastBooks.index(file)])
+    if file in filesInLastBooks:
+        nr = filesInLastBooks.index(file)
+        list = [howSimilarLetters(lastBooks[nr][1], sortingMethods[i](file)[1]) for i in range(len(sortingMethods))]
+        if any(i >= 60 for i in list):
+            print("denne boka er antagelig riktig:", file, lastBooks[nr][1])
+            books.append(lastBooks[nr])
         else:
-            book = getInfo(file)
-            books.append(book)
-        if i > 25: #create a backup in the index, so the program can be stopped and resumed and not have to start over
-            createIndex()
-            i = 0
-        else:
-            i += 1
+            books.append(getInfo(file))
+    else:
+        book = getInfo(file)
+        books.append(book)
+    if i > 25: #create a backup in the index, so the program can be stopped and resumed and not have to start over
+        createIndex()
+        i = 0
+    else:
+        i += 1
+
 #create a xcel document
 tableSize = 'A1:F'+ str(len(books)+1)
 worksheet.add_table(tableSize, {'data': books, "columns": [{'header':"Book"}, {'header':"Author(s)"}, {'header':"Format"}, {'header':"Rating"}, {'header':"Genre"}, {'header':"fullFileName"}]})
