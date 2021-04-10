@@ -29,7 +29,7 @@ books = []
 bannedFileTypes = {"jpg", "opf", "db", "tmp", "tmp-journal"}
 
 #for testing use False if there is no limit
-stopAfterNumOfBooks = 10
+stopAfterNumOfBooks = 100
 def createIndex():
     #create an index so that if there is a need to update the file it does not have to update everything alla agiain
 
@@ -155,6 +155,7 @@ def authorName(header):
     name.replace(" -",":")
     return name, author
 
+sortingMethods = [nameAuthor, authorName] #this is the differnet methods for getting the name and author so if one fails it's posseble to use a redundant method
 
 
 def freshUpNameAuthor(name, author):
