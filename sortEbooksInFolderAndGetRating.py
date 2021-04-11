@@ -216,13 +216,6 @@ async def getInfo(session, header):
     return
 
 
-#this part of the program gets the indexFile
-filesInLastBooks = []
-pathIndex = excelFileLoc + "/" + indexFileName + ".txt"
-if os.path.isfile(pathIndex) and open(pathIndex, "r").read() != "":
-    lastBooks = eval(open(pathIndex, "r").read()) #gets the index file
-    for i in range(0,len(lastBooks)):
-        filesInLastBooks.append(lastBooks[i][5])
 
 async def main():
     #this part of the program gets the indexFile
