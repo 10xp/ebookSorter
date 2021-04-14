@@ -30,7 +30,7 @@ bannedFileTypes = {"jpg", "opf", "db", "tmp", "tmp-journal"}
 
 
 #for testing use False if there is no limit
-stopAfterNumOfBooks = 30
+stopAfterNumOfBooks = 5
 def createIndex():
     #create an index so that if there is a need to update the file it does not have to update everything alla agiain
 
@@ -233,9 +233,9 @@ def main():
                 print("denne boka er antagelig riktig:", file, lastBooks[nr][1])
                 books.append(lastBooks[nr])
             else:
-                books.append(await getInfo(file))
+                books.append(getInfo(file))
         else:
-            book = await getInfo(file)
+            book = getInfo(file)
             books.append(book)
         if i > 25: #create a backup in the index, so the program can be stopped and resumed and not have to start over
             createIndex()
