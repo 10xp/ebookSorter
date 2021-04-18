@@ -28,14 +28,17 @@ books = []
 #things that need updating, if the program is changed
 bannedFileTypes = {"jpg", "opf", "db", "tmp", "tmp-journal"}
 
+
+
 #for testing use False if there is no limit
-stopAfterNumOfBooks = 30
+stopAfterNumOfBooks = 5
 def createIndex():
     #create an index so that if there is a need to update the file it does not have to update everything alla agiain
 
     index = open(os.path.join(excelFileLoc, indexFileName + ".txt" ),"w+")
     index.write(str(books))
     index.close()
+
 
 async def getWebpage(session, name):
     async with session.get("https://www.goodreads.com/search?utf8=%E2%9C%93&q=" + name + "&search_type=books") as resp:
@@ -45,7 +48,7 @@ async def getWebpage(session, name):
 def getRating(page): #finds the rating in the html code to the "page"
     page = page[page.find("avg rating")-5:]
     page = page[:4]
-    return(page)
+    return page
 
 def getGenre(page): #finds the genre in the html code to the "page"
     page = page[page.find("/shelf/show/"):page.rfind("/shelf/show/")+30]
@@ -57,24 +60,24 @@ def getGenre(page): #finds the genre in the html code to the "page"
         page = page[page.find("/shelf/show/")+12:]
         genre = genre + ", " + page[:page.find('"')]
 
-    return(genre[2:]) #deleting the first comma and space
+    return genre[2:] #deleting the first comma and space
 
 def getAuthor(page): #finds the athor in the html code to the "page"
     page = page[page.find('><span itemprop="name">'):]
     page = page[page.find('><span itemprop="name">')+6:]
     page = page[page.find(">")+1:page.find("<")]
-    return(page)
+    return page
 
 def getLink(page): #finds the link to the book in the html code to the "page"
     page = page[page.find('<a class="bookTitle" itemprop="url" href="')+42:]
-    page = page[:page.find('"')]
-    return("https://www.goodreads.com"+page)
+    page = "https://www.goodreads.com" + page[:page.find('"')]
+    return page
 
 def getName(page):
     page = page[page.find('<a class="bookTitle" itemprop="url" href="'):]
     page = page[page.find('>')+69:]
     page = page[:page.find("<")]
-    return(page)
+    return page
 
 def deleteFirst(page):
     return page[page.find(getAuthor(page))+10:]
@@ -84,15 +87,15 @@ def deleteFirst(page):
 def containdigit(string):
     for character in string:
         if character.isdigit():
-            return(True)
-    return(False)
+            return True
+    return False
 def findDigit(string):
     i = 0
     for character in string:
         if character.isdigit():
-            return(i)
+            return i
         i+=1
-    return(-1)
+    return -1
 def getAllFilesInDir(location):
     f = []
     allFiles = os.walk(loc, topdown=True)
@@ -101,8 +104,8 @@ def getAllFilesInDir(location):
             if (file[file.rfind(".")+1:] in bannedFileTypes) == False:
                 f.append(file)
                 if len(f) > stopAfterNumOfBooks and stopAfterNumOfBooks != False: #this is for testing
-                    return(f)
-    return(f)
+                    return f
+    return f
 
 
 def sumList(list):
@@ -160,6 +163,9 @@ def authorName(header):
     return name, author
 
 sortingMethods = [nameAuthor, authorName] #this is the differnet methods for getting the name and author so if one fails it's posseble to use a redundant method
+
+
+
 
 
 def freshUpNameAuthor(name, author):
@@ -228,7 +234,9 @@ async def getInfo(session, header):
 
 
 
+
 async def main():
+
     #this part of the program gets the indexFile
     filesInLastBooks = []
     pathIndex = excelFileLoc + "/" + indexFileName + ".txt"
@@ -238,6 +246,7 @@ async def main():
             filesInLastBooks.append(lastBooks[i][5])
 
     i = 0
+
     async with aiohttp.ClientSession() as session:
         tasks = []
         for file in getAllFilesInDir(loc):
@@ -260,6 +269,7 @@ async def main():
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
+
 
 #create a xcel document
 tableSize = 'A1:F'+ str(len(books)+1)
