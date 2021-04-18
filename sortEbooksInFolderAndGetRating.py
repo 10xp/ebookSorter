@@ -4,8 +4,9 @@
 #This program will find the names, athors, rating for the ebboks in a folder
 
 import os
-import requests
 import xlsxwriter
+import asyncio
+import aiohttp
 
 #input
 loc = "//OMV2M\Publicmappe/bøker/Kindle Library 12-26-10/Library"
@@ -38,8 +39,11 @@ def createIndex():
     index.write(str(books))
     index.close()
 
-def getWebpage(name):
-    return str(requests.get("https://www.goodreads.com/search?utf8=%E2%9C%93&q=" + name + "&search_type=books").content)
+
+async def getWebpage(session, name):
+    async with session.get("https://www.goodreads.com/search?utf8=%E2%9C%93&q=" + name + "&search_type=books") as resp:
+        resp = await resp.read()
+        return str(resp)
 
 def getRating(page): #finds the rating in the html code to the "page"
     page = page[page.find("avg rating")-5:]
@@ -76,7 +80,7 @@ def getName(page):
     return page
 
 def deleteFirst(page):
-    return page[page.find(getLink(page)):]
+    return page[page.find(getAuthor(page))+10:]
 
 
 
@@ -137,6 +141,10 @@ def nameAuthor(header):
     author = header[header.rfind(" - ")+3:]
     return name, author
 
+def nameSeriesAuthor(header):
+    name = name.find("_")
+    pass
+
 def authorName(header):
     author = header[:header.find(" - ")]
     book = header[header.rfind(" - ")+3:]
@@ -158,18 +166,21 @@ sortingMethods = [nameAuthor, authorName] #this is the differnet methods for get
 
 
 
+
+
 def freshUpNameAuthor(name, author):
     name = name.replace(", the", "").replace("_",":")
     author = author.replace(";", ",")
     return name, author
 
 
-def getInfo(header):
+async def getInfo(session, header):
 
     defaultMethod = 0
 
     fullEntry = header
     header = header.replace("_ a novel", "")
+    header = header.replace(" novel", "")
 
     format = header[header.rfind(".")+1:]
     header = header[:header.rfind(".")]
@@ -184,18 +195,24 @@ def getInfo(header):
         author = temp[1]
 
         #this uses the website goodreads to get the data
-        page = getWebpage(name)
+        page = await getWebpage(session, name)
 
         if howSimilarLetters(getAuthor(page), author) < 60:
             print("This book is probably wrong: ", name," --> ", author, " vs ", getAuthor(page))
             if howSimilarLetters(getAuthor(page), name) > 60:  #this will never come true (almost), so could be moved
+                print("name and author was swiched: ", name, " by ", author)
                 name = temp[1]
                 author = temp[0]
-                page = getWebpage(name)
-                print("name and author is swiched: ", name, author)
+                page = await getWebpage(session, name)
+                print("name and author was swiched: ", name, " by ", author)
             else: #here i should try to remove
-                print("Move througth the different books (use )", )
-                pass
+                print("Move througth the different books (use )", fullEntry)
+                for i in range(10):
+                    if howSimilarLetters(getAuthor(page), author) > 60 or page == "'":
+                        print("Probably rigth: ", getName(page), " by ", getAuthor(page))
+                        break
+                    print("deleting: ", getName(page), " by ", getAuthor(page))
+                    page = deleteFirst(page)
         else:
             print("Probably right book: ", name, " --> ", author, " vs ", getAuthor(page))
         rating = getRating(page)
@@ -211,11 +228,15 @@ def getInfo(header):
     if getName(page) != "":
         name = getName(page)
         author = getAuthor(page)
-    return name, author, format, rating, genre, fullEntry, link
+    book = (name, author, format, rating, genre, fullEntry, link)
+    books.append(book)
+    return
 
 
 
-def main():
+
+async def main():
+
     #this part of the program gets the indexFile
     filesInLastBooks = []
     pathIndex = excelFileLoc + "/" + indexFileName + ".txt"
@@ -225,25 +246,30 @@ def main():
             filesInLastBooks.append(lastBooks[i][5])
 
     i = 0
-    for file in getAllFilesInDir(loc):
-        if file in filesInLastBooks:
-            nr = filesInLastBooks.index(file)
-            list = [howSimilarLetters(lastBooks[nr][1], sortingMethods[i](file)[1]) for i in range(len(sortingMethods))]
-            if any(i >= 60 for i in list):
-                print("denne boka er antagelig riktig:", file, lastBooks[nr][1])
-                books.append(lastBooks[nr])
-            else:
-                books.append(getInfo(file))
-        else:
-            book = getInfo(file)
-            books.append(book)
-        if i > 25: #create a backup in the index, so the program can be stopped and resumed and not have to start over
-            createIndex()
-            i = 0
-        else:
-            i += 1
 
-main()
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for file in getAllFilesInDir(loc):
+            if file in filesInLastBooks:
+                nr = filesInLastBooks.index(file)
+                list = [howSimilarLetters(lastBooks[nr][1], sortingMethods[i](file)[1]) for i in range(len(sortingMethods))]
+                if any(i >= 60 for i in list):
+                    print("This book is probably rigth", file, lastBooks[nr][1])
+                    books.append(lastBooks[nr])
+                else:
+                    tasks.append(asyncio.ensure_future(getInfo(session, file)))
+            else:
+                tasks.append(asyncio.ensure_future(getInfo(session, file)))
+            if i > 25: #create a backup in the index, so the program can be stopped and resumed and not have to start over
+                createIndex()
+                i = 0
+            else:
+                i += 1
+        await asyncio.gather(*tasks)
+
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
+
 
 #create a xcel document
 tableSize = 'A1:F'+ str(len(books)+1)
