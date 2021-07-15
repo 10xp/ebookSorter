@@ -1,6 +1,3 @@
-
-
-
 #This program will find the names, athors, rating for the ebboks in a folder
 
 import os
@@ -9,8 +6,8 @@ import asyncio
 import aiohttp
 
 #input
-loc = "//OMV2M\Publicmappe/bøker/Sci-Fi.and.Fantasy.Ebook.Collection"
-excelFileName = "Sci-Fi.and.Fantasy.Ebook.Collection-test"  #to update just use the same index as before and it'll just uptate the new stuff. Althougth it will wil not remove books if  they are removed
+loc = "//OMV2M\Publicmappe/bøker/751 Supense e-Books"
+excelFileName = "751 Supense e-Books-test"  #to update just use the same index as before and it'll just uptate the new stuff. Althougth it will wil not remove books if  they are removed
 
 excelFileLoc = loc[:loc.rfind("/")] #just a default, it will go in the folder of the folder of the excelFile and the index
 indexFileName = excelFileName + "-index"  #just a default
@@ -31,7 +28,7 @@ bannedFileTypes = {"jpg", "opf", "db", "tmp", "tmp-journal"}
 
 
 #for testing use False if there is no limit
-stopAfterNumOfBooks = 102
+stopAfterNumOfBooks = False
 def createIndex(): #create an index so that if there is a need to update the file it does not have to update everything all agiain
     index = open(os.path.join(excelFileLoc, indexFileName + ".txt" ),"w+")
     index.write(str(books))
@@ -41,9 +38,9 @@ def createIndex(): #create an index so that if there is a need to update the fil
 async def getWebpage(session, name):
     async with session.get("https://www.goodreads.com/search?utf8=%E2%9C%93&q=" + name + "&search_type=books") as resp:
         resp = await resp.read()
-        while "<h1>page unavailable</h1>" in str(resp): #test for checing if goodreads reurns an almost ampty page
-            resp = await resp.read()
-            # stop entire program for like say 10 seconds, for goodreads returns an almost empty page if the program is to fast
+        if "<h1>page unavailable</h1>" in str(resp): #test for checing if goodreads reurns an almost ampty page
+            #await asyncio.sleep(20)
+            #resp = await resp.read()
             print(" <-||WARNING||->  Webpage is not loading...  The program is waiting for the delay to stop")
         return str(resp)
 
@@ -111,7 +108,8 @@ def getAllFilesInDir(location):
     if f == []:
         print(" <-||ERROR||-> There are no files to walk")
     return f
-
+def devideList(list, n):
+    return [list[i:i + n] for i in range(0, len(list), n)]
 
 def sumList(list):
     tot = 0
@@ -170,6 +168,8 @@ def combineSeriesAndName(name, series, saga=""):
         name = name + " (" + series + ")"
 
     return name
+
+
 #methods for getting soting the file name to name and author
 def methodNameAuthor(header, differentiator = " - "): #works for 1 or more joints
     name = header[:header.rfind(differentiator)]
@@ -260,28 +260,32 @@ async def main():
 
 
     async with aiohttp.ClientSession() as session:
-        tasks = []
+        allFiles = devideList(getAllFilesInDir(loc), 50)
+        for dList in allFiles:
+            tasks = []
 
-        for file in getAllFilesInDir(loc):
-            if file in filesInLastBooks:
-                nr = filesInLastBooks.index(file)
-                allSortingMethods = [j for sub in sortingMethods for j in sub]
-                list = [howSimilarLetters(lastBooks[nr][1], allSortingMethods[i](file)[1]) for i in range(len(allSortingMethods))]
-                if any(i >= 60 for i in list):
-                    books.append(lastBooks[nr])
+            for file in dList:
+                if file in filesInLastBooks:
+                    nr = filesInLastBooks.index(file)
+                    allSortingMethods = [j for sub in sortingMethods for j in sub]
+                    list = [howSimilarLetters(lastBooks[nr][1], allSortingMethods[i](file)[1]) for i in range(len(allSortingMethods))]
+                    if any(i >= 60 for i in list):
+                        books.append(lastBooks[nr])
+                    else:
+                        #add a delay between the tasks, for goodreads returns an almost empty page if the program is to fast
+                        tasks.append(asyncio.ensure_future(newGetInfo(session, file)))
                 else:
                     #add a delay between the tasks, for goodreads returns an almost empty page if the program is to fast
                     tasks.append(asyncio.ensure_future(newGetInfo(session, file)))
-            else:
-                #add a delay between the tasks, for goodreads returns an almost empty page if the program is to fast
-                tasks.append(asyncio.ensure_future(newGetInfo(session, file)))
-            if i > 25: #create a backup in the index, so the program can be stopped and resumed and not have to start over
-                createIndex()
-                print(i)
-                i = 0
-            else:
-                i += 1
-        await asyncio.gather(*tasks)
+                if i > 25: #create a backup in the index, so the program can be stopped and resumed and not have to start over
+                    createIndex()
+                    i = 0
+                else:
+                    i += 1
+            print("sleeping?")
+            await asyncio.gather(*tasks)
+            #await asyncio.sleep(1)
+            print("Was sleeping")
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
